@@ -23,11 +23,8 @@ module Data.Aeson.Encode
     ) where
 
 import Data.Aeson.Types (ToJSON(..), Value(..))
-import Data.Attoparsec.Number (Number(..))
 import Data.Monoid (mappend)
 import Data.Text.Lazy.Builder
-import Data.Text.Lazy.Builder.Int (decimal)
-import Data.Text.Lazy.Builder.RealFloat (realFloat)
 import Data.Text.Lazy.Encoding (encodeUtf8)
 import Numeric (showHex)
 import qualified Data.ByteString.Lazy as L
@@ -42,7 +39,7 @@ fromValue :: Value -> Builder
 fromValue Null = {-# SCC "fromValue/Null" #-} "null"
 fromValue (Bool b) = {-# SCC "fromValue/Bool" #-}
                      if b then "true" else "false"
-fromValue (Number n) = {-# SCC "fromValue/Number" #-} fromNumber n
+fromValue (Number n) = {-# SCC "fromValue/Number" #-} fromString $ show n
 fromValue (String s) = {-# SCC "fromValue/String" #-} string s
 fromValue (Array v)
     | V.null v = {-# SCC "fromValue/Array" #-} "[]"
@@ -75,12 +72,6 @@ string s = {-# SCC "string" #-} singleton '"' <> quote s <> singleton '"'
         | c < '\x20' = fromString $ "\\u" ++ replicate (4 - length h) '0' ++ h
         | otherwise  = singleton c
         where h = showHex (fromEnum c) ""
-
-fromNumber :: Number -> Builder
-fromNumber (I i) = decimal i
-fromNumber (D d)
-    | isNaN d || isInfinite d = "null"
-    | otherwise               = realFloat d
 
 -- | Efficiently serialize a JSON value as a lazy 'L.ByteString'.
 encode :: ToJSON a => a -> L.ByteString

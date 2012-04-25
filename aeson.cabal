@@ -98,6 +98,7 @@ flag developer
   default: False
 
 library
+  extensions: TypeSynonymInstances
   exposed-modules:
     Data.Aeson
     Data.Aeson.Encode
@@ -119,11 +120,12 @@ library
       Data.Aeson.Types.Generic
 
   build-depends:
-    attoparsec >= 0.8.6.1,
+    attoparsec == 0.10.1.2,
     base == 4.*,
     blaze-builder >= 0.2.1.4,
     bytestring,
     containers,
+    Decimal == 0.2.3,
     deepseq,
     hashable >= 1.1.2.0,
     mtl,

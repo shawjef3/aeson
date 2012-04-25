@@ -30,7 +30,7 @@ import Blaze.ByteString.Builder.Char.Utf8 (fromChar)
 import Blaze.ByteString.Builder.Word (fromWord8)
 import Control.Applicative as A
 import Data.Aeson.Types (Result(..), Value(..))
-import Data.Attoparsec.Char8 hiding (Result)
+import Data.Attoparsec.Char8 hiding (Result, decimal)
 import Data.Bits ((.|.), shiftL)
 import Data.ByteString as B
 import Data.Char (chr)
@@ -123,7 +123,7 @@ arrayValues val = do
 -- implementations in other languages conform to that same restriction
 -- to preserve interoperability and security.
 value :: Parser Value
-value = most <|> (Number <$> number)
+value = most <|> (Number <$> dataDecimal)
  where
   most = do
     c <- satisfy (`B8.elem` "{[\"ftn")
@@ -153,7 +153,7 @@ value' = most <|> num
       'n' -> string "ull" *> pure Null
       _   -> error "attoparsec panic! the impossible happened!"
   num = do
-    !n <- number
+    !n <- dataDecimal
     return (Number n)
 
 doubleQuote, backslash :: Word8

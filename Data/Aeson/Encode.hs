@@ -23,11 +23,8 @@ module Data.Aeson.Encode
     ) where
 
 import Data.Aeson.Types (ToJSON(..), Value(..))
-import Data.Attoparsec.Number (Number(..))
 import Data.Monoid (mappend)
 import Data.Text.Lazy.Builder
-import Data.Text.Lazy.Builder.Int (decimal)
-import Data.Text.Lazy.Builder.RealFloat (realFloat)
 import Data.Text.Lazy.Encoding (encodeUtf8)
 import Numeric (showHex)
 import qualified Data.ByteString.Lazy as L
@@ -42,7 +39,7 @@ fromValue :: Value -> Builder
 fromValue Null = {-# SCC "fromValue/Null" #-} "null"
 fromValue (Bool b) = {-# SCC "fromValue/Bool" #-}
                      if b then "true" else "false"
-fromValue (Number n) = {-# SCC "fromValue/Number" #-} fromNumber n
+fromValue (Number n) = {-# SCC "fromValue/Number" #-} fromString $ show n
 fromValue (String s) = {-# SCC "fromValue/String" #-} string s
 fromValue (Array v)
     | V.null v = {-# SCC "fromValue/Array" #-} "[]"
@@ -52,11 +49,26 @@ fromValue (Array v)
                   V.foldr f (singleton ']') (V.unsafeTail v)
   where f a z = singleton ',' <> fromValue a <> z
 fromValue (Object m) = {-# SCC "fromValue/Object" #-}
+    fromObjectFirst (singleton '{') (H.toList m)
+        where fromObjectFirst accum [] = accum <> singleton '}'
+              fromObjectFirst accum ((_,Null):zs) = fromObjectFirst accum zs
+              fromObjectFirst accum ((_,(Array v)):zs) | V.null v = fromObjectFirst accum zs
+              fromObjectFirst accum ((_,(Object m')):zs) | H.null m' = fromObjectFirst accum zs
+              fromObjectFirst accum ((k,v):zs) = fromObjectRest (accum <> string k <> singleton ':' <> fromValue v) zs
+              fromObjectRest accum [] = accum <> singleton '}'
+              fromObjectRest accum ((_,Null):zs) = fromObjectRest accum zs
+              fromObjectRest accum ((_,(Array v)):zs) | V.null v = fromObjectRest accum zs
+              fromObjectRest accum ((_,(Object m')):zs) | H.null m' = fromObjectRest accum zs
+              fromObjectRest accum ((k,v):zs) = fromObjectRest (accum <> singleton ',' <> string k <> singleton ':' <> fromValue v) zs
+
+{-
     case H.toList m of
       (x:xs) -> singleton '{' <> one x <> foldr f (singleton '}') xs
       _      -> "{}"
   where f a z     = singleton ',' <> one a <> z
+        one (_,Null) = fromText T.empty
         one (k,v) = string k <> singleton ':' <> fromValue v
+-}
 
 string :: T.Text -> Builder
 string s = {-# SCC "string" #-} singleton '"' <> quote s <> singleton '"'
@@ -75,12 +87,6 @@ string s = {-# SCC "string" #-} singleton '"' <> quote s <> singleton '"'
         | c < '\x20' = fromString $ "\\u" ++ replicate (4 - length h) '0' ++ h
         | otherwise  = singleton c
         where h = showHex (fromEnum c) ""
-
-fromNumber :: Number -> Builder
-fromNumber (I i) = decimal i
-fromNumber (D d)
-    | isNaN d || isInfinite d = "null"
-    | otherwise               = realFloat d
 
 -- | Efficiently serialize a JSON value as a lazy 'L.ByteString'.
 encode :: ToJSON a => a -> L.ByteString

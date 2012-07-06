@@ -42,12 +42,11 @@ module Data.Aeson.Types.Class
 import Control.Applicative ((<$>), (<*>), pure)
 import Data.Aeson.Functions
 import Data.Aeson.Types.Internal
-import Data.Attoparsec.Char8 (Number(..))
+import Data.Decimal
 import Data.Hashable (Hashable(..))
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Maybe (fromMaybe)
 import Data.Monoid (Dual(..), First(..), Last(..))
-import Data.Ratio (Ratio)
 import Data.Text (Text, pack, unpack)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time.Clock (UTCTime)
@@ -260,51 +259,44 @@ instance FromJSON Char where
     parseJSON v          = typeMismatch "Char" v
     {-# INLINE parseJSON #-}
 
+instance ToJSON Decimal where
+    toJSON = Number
+    {-# INLINE toJSON #-}
+
+instance FromJSON Decimal where
+    parseJSON (Number d) = pure d
+    parseJSON v = typeMismatch "Decimal" v
+
+{-
 instance ToJSON Double where
-    toJSON = Number . D
+    toJSON = Number . toRational
     {-# INLINE toJSON #-}
 
 instance FromJSON Double where
-    parseJSON (Number n) = case n of
-                             D d -> pure d
-                             I i -> pure (fromIntegral i)
+    parseJSON (Number n) = pure $ fromRational n
     parseJSON Null       = pure (0/0)
     parseJSON v          = typeMismatch "Double" v
     {-# INLINE parseJSON #-}
 
-instance ToJSON Number where
-    toJSON = Number
-    {-# INLINE toJSON #-}
-
-instance FromJSON Number where
-    parseJSON (Number n) = pure n
-    parseJSON Null       = pure (D (0/0))
-    parseJSON v          = typeMismatch "Number" v
-    {-# INLINE parseJSON #-}
-
 instance ToJSON Float where
-    toJSON = Number . realToFrac
+    toJSON = Number . toRational
     {-# INLINE toJSON #-}
 
 instance FromJSON Float where
-    parseJSON (Number n) = pure $ case n of
-                                    D d -> realToFrac d
-                                    I i -> fromIntegral i
+    parseJSON (Number n) = pure $ fromRational n
     parseJSON Null       = pure (0/0)
     parseJSON v          = typeMismatch "Float" v
     {-# INLINE parseJSON #-}
 
 instance ToJSON (Ratio Integer) where
-    toJSON = Number . fromRational
+    toJSON = Number
     {-# INLINE toJSON #-}
 
 instance FromJSON (Ratio Integer) where
-    parseJSON (Number n) = pure $ case n of
-                                    D d -> toRational d
-                                    I i -> fromIntegral i
+    parseJSON (Number n) = pure n
     parseJSON v          = typeMismatch "Ratio Integer" v
     {-# INLINE parseJSON #-}
-
+-}
 instance ToJSON Int where
     toJSON = Number . fromIntegral
     {-# INLINE toJSON #-}
@@ -314,7 +306,8 @@ instance FromJSON Int where
     {-# INLINE parseJSON #-}
 
 parseIntegral :: Integral a => Value -> Parser a
-parseIntegral (Number n) = pure (floor n)
+parseIntegral (Number n) = pure (case roundTo 0 n of
+                                   Decimal _ i -> fromIntegral i)
 parseIntegral v          = typeMismatch "Integral" v
 {-# INLINE parseIntegral #-}
 

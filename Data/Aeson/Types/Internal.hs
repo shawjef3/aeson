@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, DeriveDataTypeable, Rank2Types #-}
+{-# LANGUAGE CPP, DeriveDataTypeable, Rank2Types, FlexibleInstances, TypeSynonymInstances #-}
 
 -- |
 -- Module:      Data.Aeson.Types.Internal
@@ -33,9 +33,10 @@ module Data.Aeson.Types.Internal
 import Control.Applicative
 import Control.DeepSeq (NFData(..))
 import Control.Monad.State.Strict
-import Data.Attoparsec.Char8 (Number(..))
+import Data.Decimal
 import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
+import Data.List (foldl')
 import Data.Monoid (Monoid(..))
 import Data.String (IsString(..))
 import Data.Text (Text, pack)
@@ -159,7 +160,7 @@ type Array = Vector Value
 data Value = Object !Object
            | Array !Array
            | String !Text
-           | Number !Number
+           | Number !Decimal
            | Bool !Bool
            | Null
              deriving (Eq, Show, Typeable)
@@ -168,7 +169,7 @@ instance NFData Value where
     rnf (Object o) = rnf o
     rnf (Array a)  = V.foldl' (\x y -> rnf y `seq` x) () a
     rnf (String s) = rnf s
-    rnf (Number n) = case n of I i -> rnf i; D d -> rnf d
+    rnf (Number n) = rnf n
     rnf (Bool b)   = rnf b
     rnf Null       = ()
 
@@ -180,7 +181,7 @@ instance Hashable Value where
     hash (Object o) = H.foldl' hashWithSalt 0 o
     hash (Array a)  = V.foldl' hashWithSalt 1 a
     hash (String s) = 2 `hashWithSalt` s
-    hash (Number n) = 3 `hashWithSalt` case n of I i -> hash i; D d -> hash d
+    hash (Number (Decimal e n)) = foldl' hashWithSalt 3 [fromIntegral e, n]
     hash (Bool b)   = 4 `hashWithSalt` b
     hash Null       = 5
 

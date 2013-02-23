@@ -2,6 +2,7 @@
 
 import Control.Exception
 import Control.Monad
+import Data.Fixed
 import Data.Aeson
 import Data.Attoparsec
 import Data.Time.Clock
@@ -20,7 +21,7 @@ main = do
             | otherwise = do
           hSeek h AbsoluteSeek 0
           let refill = B.hGet h 16384
-          result <- parseWith refill json =<< refill
+          result <- parseWith refill (json :: Parser (Value E9)) =<< refill
           case result of
             Done _ r -> loop (good+1) bad
             _        -> loop good (bad+1)

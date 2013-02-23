@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, DeriveGeneric, TemplateHaskell #-}
+{-# LANGUAGE DeriveDataTypeable, DeriveGeneric, TemplateHaskell, MultiParamTypeClasses, FlexibleContexts #-}
 
 module Main where
 
@@ -10,6 +10,7 @@ import Control.DeepSeq (NFData, rnf, deepseq)
 
 import Data.Typeable (Typeable)
 import Data.Data (Data)
+import Data.Fixed
 import GHC.Generics (Generic)
 
 import Data.Aeson.Types
@@ -47,26 +48,26 @@ d = Record
                     }
     }
 
-instance ToJSON   a => ToJSON   (D a)
-instance FromJSON a => FromJSON (D a)
+instance ToJSON  E9 a => ToJSON E9  (D a)
+instance FromJSON E9 a => FromJSON E9 (D a)
 
-thDToJSON :: ToJSON a => D a -> Value
+thDToJSON :: ToJSON E9 a => D a -> Value E9
 thDToJSON = $(mkToJSON id ''D)
 
-thDParseJSON :: FromJSON a => Value -> Parser (D a)
+thDParseJSON :: FromJSON E9 a => Value E9 -> Parser (D a)
 thDParseJSON = $(mkParseJSON id ''D)
 
-thDFromJSON :: FromJSON a => Value -> Result (D a)
+thDFromJSON :: FromJSON E9 a => Value E9 -> Result (D a)
 thDFromJSON = parse thDParseJSON
 
 --------------------------------------------------------------------------------
 
 data BigRecord = BigRecord
-    { field01 :: !Int, field02 :: !Int, field03 :: !Int, field04 :: !Int, field05 :: !Int
-    , field06 :: !Int, field07 :: !Int, field08 :: !Int, field09 :: !Int, field10 :: !Int
-    , field11 :: !Int, field12 :: !Int, field13 :: !Int, field14 :: !Int, field15 :: !Int
-    , field16 :: !Int, field17 :: !Int, field18 :: !Int, field19 :: !Int, field20 :: !Int
-    , field21 :: !Int, field22 :: !Int, field23 :: !Int, field24 :: !Int, field25 :: !Int
+    { field01 :: !Nano, field02 :: !Nano, field03 :: !Nano, field04 :: !Nano, field05 :: !Nano
+    , field06 :: !Nano, field07 :: !Nano, field08 :: !Nano, field09 :: !Nano, field10 :: !Nano
+    , field11 :: !Nano, field12 :: !Nano, field13 :: !Nano, field14 :: !Nano, field15 :: !Nano
+    , field16 :: !Nano, field17 :: !Nano, field18 :: !Nano, field19 :: !Nano, field20 :: !Nano
+    , field21 :: !Nano, field22 :: !Nano, field23 :: !Nano, field24 :: !Nano, field25 :: !Nano
     } deriving (Show, Eq, Generic, Data, Typeable)
 
 instance NFData BigRecord
@@ -77,26 +78,26 @@ bigRecord = BigRecord 1   2  3  4  5
                       16 17 18 19 20
                       21 22 23 24 25
 
-instance ToJSON   BigRecord
-instance FromJSON BigRecord
+instance ToJSON E9 BigRecord
+instance FromJSON E9 BigRecord
 
-thBigRecordToJSON :: BigRecord -> Value
+thBigRecordToJSON :: BigRecord -> Value E9
 thBigRecordToJSON = $(mkToJSON id ''BigRecord)
 
-thBigRecordParseJSON :: Value -> Parser BigRecord
+thBigRecordParseJSON :: Value E9 -> Parser BigRecord
 thBigRecordParseJSON = $(mkParseJSON id ''BigRecord)
 
-thBigRecordFromJSON :: Value -> Result BigRecord
+thBigRecordFromJSON :: Value E9 -> Result BigRecord
 thBigRecordFromJSON = parse thBigRecordParseJSON
 
 --------------------------------------------------------------------------------
 
 data BigProduct = BigProduct
-    !Int !Int !Int !Int !Int
-    !Int !Int !Int !Int !Int
-    !Int !Int !Int !Int !Int
-    !Int !Int !Int !Int !Int
-    !Int !Int !Int !Int !Int
+    !Nano !Nano !Nano !Nano !Nano
+    !Nano !Nano !Nano !Nano !Nano
+    !Nano !Nano !Nano !Nano !Nano
+    !Nano !Nano !Nano !Nano !Nano
+    !Nano !Nano !Nano !Nano !Nano
     deriving (Show, Eq, Generic, Data, Typeable)
 
 instance NFData BigProduct
@@ -107,16 +108,16 @@ bigProduct = BigProduct 1   2  3  4  5
                         16 17 18 19 20
                         21 22 23 24 25
 
-instance ToJSON   BigProduct
-instance FromJSON BigProduct
+instance ToJSON E9  BigProduct
+instance FromJSON E9 BigProduct
 
-thBigProductToJSON :: BigProduct -> Value
+thBigProductToJSON :: BigProduct -> Value E9
 thBigProductToJSON = $(mkToJSON id ''BigProduct)
 
-thBigProductParseJSON :: Value -> Parser BigProduct
+thBigProductParseJSON :: Value E9 -> Parser BigProduct
 thBigProductParseJSON = $(mkParseJSON id ''BigProduct)
 
-thBigProductFromJSON :: Value -> Result BigProduct
+thBigProductFromJSON :: Value E9 -> Result BigProduct
 thBigProductFromJSON = parse thBigProductParseJSON
 
 --------------------------------------------------------------------------------
@@ -132,21 +133,21 @@ instance NFData BigSum
 
 bigSum = F25
 
-instance ToJSON   BigSum
-instance FromJSON BigSum
+instance ToJSON E9 BigSum
+instance FromJSON E9 BigSum
 
-thBigSumToJSON :: BigSum -> Value
+thBigSumToJSON :: BigSum -> Value E9
 thBigSumToJSON = $(mkToJSON id ''BigSum)
 
-thBigSumParseJSON :: Value -> Parser BigSum
+thBigSumParseJSON :: Value E9 -> Parser BigSum
 thBigSumParseJSON = $(mkParseJSON id ''BigSum)
 
-thBigSumFromJSON :: Value -> Result BigSum
+thBigSumFromJSON :: Value E9 -> Result BigSum
 thBigSumFromJSON = parse thBigSumParseJSON
 
 --------------------------------------------------------------------------------
 
-type FJ a = Value -> Result a
+type FJ a = Value E9 -> Result a
 
 main :: IO ()
 main = defaultMain
@@ -154,7 +155,7 @@ main = defaultMain
     in d `deepseq` v `deepseq`
        bgroup "D"
        [ group "toJSON"   (nf thDToJSON d)
-                          (nf G.toJSON  d)
+                          (nf (G.toJSON :: Data a => a -> Value E9)  d)
                           (nf toJSON    d)
        , group "fromJSON" (nf (thDFromJSON :: FJ T) v)
                           (nf (G.fromJSON  :: FJ T) v)
@@ -164,7 +165,7 @@ main = defaultMain
     in bigRecord `deepseq` v `deepseq`
        bgroup "BigRecord"
        [ group "toJSON"   (nf thBigRecordToJSON bigRecord)
-                          (nf G.toJSON          bigRecord)
+                          (nf (G.toJSON :: Data a => a -> Value E9)          bigRecord)
                           (nf toJSON            bigRecord)
        , group "fromJSON" (nf (thBigRecordFromJSON :: FJ BigRecord) v)
                           (nf (G.fromJSON          :: FJ BigRecord) v)
@@ -174,7 +175,7 @@ main = defaultMain
     in bigProduct `deepseq` v `deepseq`
        bgroup "BigProduct"
        [ group "toJSON"   (nf thBigProductToJSON bigProduct)
-                          (nf G.toJSON           bigProduct)
+                          (nf (G.toJSON :: Data a => a -> Value E9)           bigProduct)
                           (nf toJSON             bigProduct)
        , group "fromJSON" (nf (thBigProductFromJSON :: FJ BigProduct) v)
                           (nf (G.fromJSON           :: FJ BigProduct) v)
@@ -184,7 +185,7 @@ main = defaultMain
     in bigSum `deepseq` v `deepseq`
        bgroup "BigSum"
        [ group "toJSON"   (nf thBigSumToJSON bigSum)
-                          (nf G.toJSON       bigSum)
+                          (nf (G.toJSON :: Data a => a -> Value E9)       bigSum)
                           (nf toJSON         bigSum)
        , group "fromJSON" (nf (thBigSumFromJSON :: FJ BigSum) v)
                           (nf (G.fromJSON       :: FJ BigSum) v)

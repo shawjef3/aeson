@@ -40,13 +40,14 @@ module Data.Aeson.Types.Class
     ) where
 
 import Control.Applicative ((<$>), (<*>), pure)
+import Data.Fixed
 import Data.Aeson.Functions
 import Data.Aeson.Types.Internal
-import Data.Decimal
 import Data.Hashable (Hashable(..))
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Maybe (fromMaybe)
 import Data.Monoid (Dual(..), First(..), Last(..))
+import Data.Ratio (Ratio)
 import Data.Text (Text, pack, unpack)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time.Clock (UTCTime)
@@ -77,11 +78,11 @@ import qualified Data.Vector.Mutable as VM ( unsafeNew, unsafeWrite )
 #ifdef GENERICS
 import GHC.Generics
 
-class GToJSON f where
-    gToJSON :: f a -> Value
+class GToJSON r f where
+    gToJSON :: f a -> Value r
 
-class GFromJSON f where
-    gParseJSON :: Value -> Parser (f a)
+class GFromJSON r f where
+    gParseJSON :: Value r -> Parser (f a)
 #endif
 
 -- | A type that can be converted to JSON.
@@ -127,11 +128,11 @@ class GFromJSON f where
 --
 -- instance ToJSON Coord
 -- @
-class ToJSON a where
-    toJSON   :: a -> Value
+class ToJSON r a | a -> r where
+    toJSON   :: a -> Value r
 
 #ifdef GENERICS
-    default toJSON :: (Generic a, GToJSON (Rep a)) => a -> Value
+    default toJSON :: (Generic a, GToJSON r (Rep a)) => a -> Value r
     toJSON = gToJSON . from
 #endif
 
@@ -188,30 +189,30 @@ class ToJSON a where
 --
 -- instance FromJSON Coord
 -- @
-class FromJSON a where
-    parseJSON :: Value -> Parser a
+class FromJSON r a | a -> r where
+    parseJSON :: Value r -> Parser a
 
 #ifdef GENERICS
-    default parseJSON :: (Generic a, GFromJSON (Rep a)) => Value -> Parser a
+    default parseJSON :: (Generic a, GFromJSON r (Rep a)) => Value r -> Parser a
     parseJSON = fmap to . gParseJSON
 #endif
 
-instance (ToJSON a) => ToJSON (Maybe a) where
+instance (ToJSON r a) => ToJSON r (Maybe a) where
     toJSON (Just a) = toJSON a
     toJSON Nothing  = Null
     {-# INLINE toJSON #-}
 
-instance (FromJSON a) => FromJSON (Maybe a) where
+instance (FromJSON r a) => FromJSON r (Maybe a) where
     parseJSON Null   = pure Nothing
     parseJSON a      = Just <$> parseJSON a
     {-# INLINE parseJSON #-}
 
-instance (ToJSON a, ToJSON b) => ToJSON (Either a b) where
+instance (ToJSON r a, ToJSON r b) => ToJSON r (Either a b) where
     toJSON (Left a)  = object [left  .= a]
     toJSON (Right b) = object [right .= b]
     {-# INLINE toJSON #-}
 
-instance (FromJSON a, FromJSON b) => FromJSON (Either a b) where
+instance (FromJSON r a, FromJSON r b) => FromJSON r (Either a b) where
     parseJSON (Object (H.toList -> [(key, value)]))
         | key == left  = Left  <$> parseJSON value
         | key == right = Right <$> parseJSON value
@@ -222,357 +223,354 @@ left, right :: Text
 left  = "Left"
 right = "Right"
 
-instance ToJSON Bool where
+instance ToJSON r Bool where
     toJSON = Bool
     {-# INLINE toJSON #-}
 
-instance FromJSON Bool where
+instance FromJSON r Bool where
     parseJSON (Bool b) = pure b
     parseJSON v        = typeMismatch "Bool" v
     {-# INLINE parseJSON #-}
 
-instance ToJSON () where
+instance ToJSON r () where
     toJSON _ = emptyArray
     {-# INLINE toJSON #-}
 
-instance FromJSON () where
+instance FromJSON r () where
     parseJSON (Array v) | V.null v = pure ()
     parseJSON v        = typeMismatch "()" v
     {-# INLINE parseJSON #-}
 
-instance ToJSON [Char] where
+instance ToJSON r [Char] where
     toJSON = String . T.pack
     {-# INLINE toJSON #-}
 
-instance FromJSON [Char] where
+instance FromJSON r [Char] where
     parseJSON (String t) = pure (T.unpack t)
     parseJSON v          = typeMismatch "String" v
     {-# INLINE parseJSON #-}
 
-instance ToJSON Char where
+instance ToJSON r Char where
     toJSON = String . T.singleton
     {-# INLINE toJSON #-}
 
-instance FromJSON Char where
+instance FromJSON r Char where
     parseJSON (String t)
         | T.compareLength t 1 == EQ = pure (T.head t)
     parseJSON v          = typeMismatch "Char" v
     {-# INLINE parseJSON #-}
 
-instance ToJSON Decimal where
-    toJSON = Number
+instance (HasResolution r) => ToJSON r Double where
+    toJSON = Number . fromRational . toRational
     {-# INLINE toJSON #-}
 
-instance FromJSON Decimal where
-    parseJSON (Number d) = pure d
-    parseJSON v = typeMismatch "Decimal" v
-
-{-
-instance ToJSON Double where
-    toJSON = Number . toRational
-    {-# INLINE toJSON #-}
-
-instance FromJSON Double where
-    parseJSON (Number n) = pure $ fromRational n
+instance (HasResolution r) => FromJSON r Double where
+    parseJSON (Number n) = pure . fromRational . toRational $ n
     parseJSON Null       = pure (0/0)
     parseJSON v          = typeMismatch "Double" v
     {-# INLINE parseJSON #-}
 
-instance ToJSON Float where
-    toJSON = Number . toRational
+instance (HasResolution r) => ToJSON r Float where
+    toJSON = Number . realToFrac
     {-# INLINE toJSON #-}
 
-instance FromJSON Float where
-    parseJSON (Number n) = pure $ fromRational n
+instance (HasResolution r) => FromJSON r Float where
+    parseJSON (Number n) = pure $ realToFrac n
     parseJSON Null       = pure (0/0)
     parseJSON v          = typeMismatch "Float" v
     {-# INLINE parseJSON #-}
 
-instance ToJSON (Ratio Integer) where
+instance (HasResolution r) => FromJSON r (Fixed r) where
+    parseJSON (Number n) = pure n
+    parseJSON v = typeMismatch "Fixed" v
+
+instance (HasResolution r) => ToJSON r (Fixed r) where
     toJSON = Number
+
+instance (HasResolution r) => ToJSON r (Ratio Integer) where
+    toJSON = Number . fromRational
     {-# INLINE toJSON #-}
 
-instance FromJSON (Ratio Integer) where
-    parseJSON (Number n) = pure n
+instance (HasResolution r) => FromJSON r (Ratio Integer) where
+    parseJSON (Number n) = pure . toRational $ n
     parseJSON v          = typeMismatch "Ratio Integer" v
     {-# INLINE parseJSON #-}
--}
-instance ToJSON Int where
+
+instance (HasResolution r) => ToJSON r Int where
     toJSON = Number . fromIntegral
     {-# INLINE toJSON #-}
 
-instance FromJSON Int where
+instance (HasResolution r) => FromJSON r Int where
     parseJSON = parseIntegral
     {-# INLINE parseJSON #-}
 
-parseIntegral :: Integral a => Value -> Parser a
-parseIntegral (Number n) = pure (case roundTo 0 n of
-                                   Decimal _ i -> fromIntegral i)
+parseIntegral :: (HasResolution r, Integral a) => Value r -> Parser a
+parseIntegral (Number n) = pure (floor n)
 parseIntegral v          = typeMismatch "Integral" v
 {-# INLINE parseIntegral #-}
 
-instance ToJSON Integer where
+instance (HasResolution r) => ToJSON r Integer where
     toJSON = Number . fromIntegral
     {-# INLINE toJSON #-}
 
-instance FromJSON Integer where
+instance (HasResolution r) => FromJSON r Integer where
     parseJSON = parseIntegral
     {-# INLINE parseJSON #-}
 
-instance ToJSON Int8 where
+instance (HasResolution r) => ToJSON r Int8 where
     toJSON = Number . fromIntegral
     {-# INLINE toJSON #-}
 
-instance FromJSON Int8 where
+instance (HasResolution r) => FromJSON r Int8 where
     parseJSON = parseIntegral
     {-# INLINE parseJSON #-}
 
-instance ToJSON Int16 where
+instance (HasResolution r) => ToJSON r Int16 where
     toJSON = Number . fromIntegral
     {-# INLINE toJSON #-}
 
-instance FromJSON Int16 where
+instance (HasResolution r) => FromJSON r Int16 where
     parseJSON = parseIntegral
     {-# INLINE parseJSON #-}
 
-instance ToJSON Int32 where
+instance (HasResolution r) => ToJSON r Int32 where
     toJSON = Number . fromIntegral
     {-# INLINE toJSON #-}
 
-instance FromJSON Int32 where
+instance (HasResolution r) => FromJSON r Int32 where
     parseJSON = parseIntegral
     {-# INLINE parseJSON #-}
 
-instance ToJSON Int64 where
+instance (HasResolution r) => ToJSON r Int64 where
     toJSON = Number . fromIntegral
     {-# INLINE toJSON #-}
 
-instance FromJSON Int64 where
+instance (HasResolution r) => FromJSON r Int64 where
     parseJSON = parseIntegral
     {-# INLINE parseJSON #-}
 
-instance ToJSON Word where
+instance (HasResolution r) => ToJSON r Word where
     toJSON = Number . fromIntegral
     {-# INLINE toJSON #-}
 
-instance FromJSON Word where
+instance (HasResolution r) => FromJSON r Word where
     parseJSON = parseIntegral
     {-# INLINE parseJSON #-}
 
-instance ToJSON Word8 where
+instance (HasResolution r) => ToJSON r Word8 where
     toJSON = Number . fromIntegral
     {-# INLINE toJSON #-}
 
-instance FromJSON Word8 where
+instance (HasResolution r) => FromJSON r Word8 where
     parseJSON = parseIntegral
     {-# INLINE parseJSON #-}
 
-instance ToJSON Word16 where
+instance (HasResolution r) => ToJSON r Word16 where
     toJSON = Number . fromIntegral
     {-# INLINE toJSON #-}
 
-instance FromJSON Word16 where
+instance (HasResolution r) => FromJSON r Word16 where
     parseJSON = parseIntegral
     {-# INLINE parseJSON #-}
 
-instance ToJSON Word32 where
+instance (HasResolution r) => ToJSON r Word32 where
     toJSON = Number . fromIntegral
     {-# INLINE toJSON #-}
 
-instance FromJSON Word32 where
+instance (HasResolution r) => FromJSON r Word32 where
     parseJSON = parseIntegral
     {-# INLINE parseJSON #-}
 
-instance ToJSON Word64 where
+instance (HasResolution r) => ToJSON r Word64 where
     toJSON = Number . fromIntegral
     {-# INLINE toJSON #-}
 
-instance FromJSON Word64 where
+instance (HasResolution r) => FromJSON r Word64 where
     parseJSON = parseIntegral
     {-# INLINE parseJSON #-}
 
-instance ToJSON Text where
+instance ToJSON r Text where
     toJSON = String
     {-# INLINE toJSON #-}
 
-instance FromJSON Text where
+instance FromJSON r Text where
     parseJSON (String t) = pure t
     parseJSON v          = typeMismatch "Text" v
     {-# INLINE parseJSON #-}
 
-instance ToJSON LT.Text where
+instance ToJSON r LT.Text where
     toJSON = String . LT.toStrict
     {-# INLINE toJSON #-}
 
-instance FromJSON LT.Text where
+instance FromJSON r LT.Text where
     parseJSON (String t) = pure (LT.fromStrict t)
     parseJSON v          = typeMismatch "Lazy Text" v
     {-# INLINE parseJSON #-}
 
-instance ToJSON B.ByteString where
+instance ToJSON r B.ByteString where
     toJSON = String . decode
     {-# INLINE toJSON #-}
 
-instance FromJSON B.ByteString where
+instance FromJSON r B.ByteString where
     parseJSON (String t) = pure . encodeUtf8 $ t
     parseJSON v          = typeMismatch "ByteString" v
     {-# INLINE parseJSON #-}
 
-instance ToJSON LB.ByteString where
+instance ToJSON r LB.ByteString where
     toJSON = toJSON . strict
     {-# INLINE toJSON #-}
 
-instance FromJSON LB.ByteString where
+instance FromJSON r LB.ByteString where
     parseJSON (String t) = pure . lazy $ t
     parseJSON v          = typeMismatch "Lazy ByteString" v
     {-# INLINE parseJSON #-}
 
-instance (ToJSON a) => ToJSON [a] where
+instance (ToJSON r a) => ToJSON r [a] where
     toJSON = Array . V.fromList . map toJSON
     {-# INLINE toJSON #-}
 
-instance (FromJSON a) => FromJSON [a] where
+instance (FromJSON r a) => FromJSON r [a] where
     parseJSON (Array a) = mapM parseJSON (V.toList a)
     parseJSON v         = typeMismatch "[a]" v
     {-# INLINE parseJSON #-}
 
-instance (ToJSON a) => ToJSON (Vector a) where
+instance (ToJSON r a) => ToJSON r (Vector a) where
     toJSON = Array . V.map toJSON
     {-# INLINE toJSON #-}
 
-instance (FromJSON a) => FromJSON (Vector a) where
+instance (FromJSON r a) => FromJSON r (Vector a) where
     parseJSON (Array a) = V.mapM parseJSON a
     parseJSON v         = typeMismatch "Vector a" v
     {-# INLINE parseJSON #-}
 
-vectorToJSON :: (VG.Vector v a, ToJSON a) => v a -> Value
+vectorToJSON :: (VG.Vector v a, ToJSON r a, HasResolution r) => v a -> Value r
 vectorToJSON = Array . V.map toJSON . V.convert
 {-# INLINE vectorToJSON #-}
 
-vectorParseJSON :: (FromJSON a, VG.Vector w a) => String -> Value -> Parser (w a)
+vectorParseJSON :: (FromJSON r a, VG.Vector w a, HasResolution r) => String -> Value r -> Parser (w a)
 vectorParseJSON _ (Array a) = V.convert <$> V.mapM parseJSON a
 vectorParseJSON s v         = typeMismatch s v
 {-# INLINE vectorParseJSON #-}
 
-instance (Storable a, ToJSON a) => ToJSON (VS.Vector a) where
+instance (Storable a, ToJSON r a, HasResolution r) => ToJSON r (VS.Vector a) where
     toJSON = vectorToJSON
 
-instance (Storable a, FromJSON a) => FromJSON (VS.Vector a) where
+instance (Storable a, FromJSON r a, HasResolution r) => FromJSON r (VS.Vector a) where
     parseJSON = vectorParseJSON "Data.Vector.Storable.Vector a"
 
-instance (VP.Prim a, ToJSON a) => ToJSON (VP.Vector a) where
+instance (VP.Prim a, ToJSON r a, HasResolution r) => ToJSON r (VP.Vector a) where
     toJSON = vectorToJSON
 
-instance (VP.Prim a, FromJSON a) => FromJSON (VP.Vector a) where
+instance (VP.Prim a, FromJSON r a, HasResolution r) => FromJSON r (VP.Vector a) where
     parseJSON = vectorParseJSON "Data.Vector.Primitive.Vector a"
 
-instance (VG.Vector VU.Vector a, ToJSON a) => ToJSON (VU.Vector a) where
+instance (VG.Vector VU.Vector a, ToJSON r a, HasResolution r) => ToJSON r (VU.Vector a) where
     toJSON = vectorToJSON
 
-instance (VG.Vector VU.Vector a, FromJSON a) => FromJSON (VU.Vector a) where
+instance (VG.Vector VU.Vector a, FromJSON r a, HasResolution r) => FromJSON r (VU.Vector a) where
     parseJSON = vectorParseJSON "Data.Vector.Unboxed.Vector a"
 
-instance (ToJSON a) => ToJSON (Set.Set a) where
+instance (ToJSON r a) => ToJSON r (Set.Set a) where
     toJSON = toJSON . Set.toList
     {-# INLINE toJSON #-}
 
-instance (Ord a, FromJSON a) => FromJSON (Set.Set a) where
+instance (Ord a, FromJSON r a) => FromJSON r (Set.Set a) where
     parseJSON = fmap Set.fromList . parseJSON
     {-# INLINE parseJSON #-}
 
-instance (ToJSON a) => ToJSON (HashSet.HashSet a) where
+instance (ToJSON r a) => ToJSON r (HashSet.HashSet a) where
     toJSON = toJSON . HashSet.toList
     {-# INLINE toJSON #-}
 
-instance (Eq a, Hashable a, FromJSON a) => FromJSON (HashSet.HashSet a) where
+instance (Eq a, Hashable a, FromJSON r a) => FromJSON r (HashSet.HashSet a) where
     parseJSON = fmap HashSet.fromList . parseJSON
     {-# INLINE parseJSON #-}
 
-instance ToJSON IntSet.IntSet where
+instance (HasResolution r) => ToJSON r IntSet.IntSet where
     toJSON = toJSON . IntSet.toList
     {-# INLINE toJSON #-}
 
-instance FromJSON IntSet.IntSet where
+instance (HasResolution r) => FromJSON r IntSet.IntSet where
     parseJSON = fmap IntSet.fromList . parseJSON
     {-# INLINE parseJSON #-}
 
-instance ToJSON a => ToJSON (IntMap.IntMap a) where
+instance (HasResolution r, ToJSON r a) => ToJSON r (IntMap.IntMap a) where
     toJSON = toJSON . IntMap.toList
     {-# INLINE toJSON #-}
 
-instance FromJSON a => FromJSON (IntMap.IntMap a) where
+instance (HasResolution r, FromJSON r a) => FromJSON r (IntMap.IntMap a) where
     parseJSON = fmap IntMap.fromList . parseJSON
     {-# INLINE parseJSON #-}
 
-instance (ToJSON v) => ToJSON (M.Map Text v) where
+instance (ToJSON r v) => ToJSON r (M.Map Text v) where
     toJSON = Object . M.foldrWithKey (\k -> H.insert k . toJSON) H.empty
     {-# INLINE toJSON #-}
 
-instance (FromJSON v) => FromJSON (M.Map Text v) where
+instance (FromJSON r v) => FromJSON r (M.Map Text v) where
     parseJSON (Object o) = H.foldrWithKey M.insert M.empty <$> traverse parseJSON o
     parseJSON v          = typeMismatch "Map Text a" v
 
-instance (ToJSON v) => ToJSON (M.Map LT.Text v) where
+instance (ToJSON r v) => ToJSON r (M.Map LT.Text v) where
     toJSON = Object . mapHashKeyVal LT.toStrict toJSON
 
-instance (FromJSON v) => FromJSON (M.Map LT.Text v) where
+instance (FromJSON r v) => FromJSON r (M.Map LT.Text v) where
     parseJSON = fmap (hashMapKey LT.fromStrict) . parseJSON
 
-instance (ToJSON v) => ToJSON (M.Map String v) where
+instance (ToJSON r v) => ToJSON r (M.Map String v) where
     toJSON = Object . mapHashKeyVal pack toJSON
 
-instance (FromJSON v) => FromJSON (M.Map String v) where
+instance (FromJSON r v) => FromJSON r (M.Map String v) where
     parseJSON = fmap (hashMapKey unpack) . parseJSON
 
-instance (ToJSON v) => ToJSON (M.Map B.ByteString v) where
+instance (ToJSON r v) => ToJSON r (M.Map B.ByteString v) where
     toJSON = Object . mapHashKeyVal decode toJSON
 
-instance (FromJSON v) => FromJSON (M.Map B.ByteString v) where
+instance (FromJSON r v) => FromJSON r (M.Map B.ByteString v) where
     parseJSON = fmap (hashMapKey encodeUtf8) . parseJSON
 
-instance (ToJSON v) => ToJSON (M.Map LB.ByteString v) where
+instance (ToJSON r v) => ToJSON r (M.Map LB.ByteString v) where
     toJSON = Object . mapHashKeyVal strict toJSON
 
-instance (FromJSON v) => FromJSON (M.Map LB.ByteString v) where
+instance (FromJSON r v) => FromJSON r (M.Map LB.ByteString v) where
     parseJSON = fmap (hashMapKey lazy) . parseJSON
 
-instance (ToJSON v) => ToJSON (H.HashMap Text v) where
+instance (ToJSON r v) => ToJSON r (H.HashMap Text v) where
     toJSON = Object . H.map toJSON
     {-# INLINE toJSON #-}
 
-instance (FromJSON v) => FromJSON (H.HashMap Text v) where
+instance (FromJSON r v) => FromJSON r (H.HashMap Text v) where
     parseJSON (Object o) = traverse parseJSON o
     parseJSON v          = typeMismatch "HashMap Text a" v
 
-instance (ToJSON v) => ToJSON (H.HashMap LT.Text v) where
+instance (ToJSON r v) => ToJSON r (H.HashMap LT.Text v) where
     toJSON = Object . mapKeyVal LT.toStrict toJSON
 
-instance (FromJSON v) => FromJSON (H.HashMap LT.Text v) where
+instance (FromJSON r v) => FromJSON r (H.HashMap LT.Text v) where
     parseJSON = fmap (mapKey LT.fromStrict) . parseJSON
 
-instance (ToJSON v) => ToJSON (H.HashMap String v) where
+instance (ToJSON r v) => ToJSON r (H.HashMap String v) where
     toJSON = Object . mapKeyVal pack toJSON
 
-instance (FromJSON v) => FromJSON (H.HashMap String v) where
+instance (FromJSON r v) => FromJSON r (H.HashMap String v) where
     parseJSON = fmap (mapKey unpack) . parseJSON
 
-instance (ToJSON v) => ToJSON (H.HashMap B.ByteString v) where
+instance (ToJSON r v) => ToJSON r (H.HashMap B.ByteString v) where
     toJSON = Object . mapKeyVal decode toJSON
 
-instance (FromJSON v) => FromJSON (H.HashMap B.ByteString v) where
+instance (FromJSON r v) => FromJSON r (H.HashMap B.ByteString v) where
     parseJSON = fmap (mapKey encodeUtf8) . parseJSON
 
-instance (ToJSON v) => ToJSON (H.HashMap LB.ByteString v) where
+instance (ToJSON r v) => ToJSON r (H.HashMap LB.ByteString v) where
     toJSON = Object . mapKeyVal strict toJSON
 
-instance (FromJSON v) => FromJSON (H.HashMap LB.ByteString v) where
+instance (FromJSON r v) => FromJSON r (H.HashMap LB.ByteString v) where
     parseJSON = fmap (mapKey lazy) . parseJSON
 
-instance ToJSON Value where
+instance (HasResolution r) => ToJSON r (Value r) where
     toJSON a = a
     {-# INLINE toJSON #-}
 
-instance FromJSON Value where
+instance (HasResolution r) => FromJSON r (Value r) where
     parseJSON a = pure a
     {-# INLINE parseJSON #-}
 
@@ -587,14 +585,14 @@ newtype DotNetTime = DotNetTime {
       fromDotNetTime :: UTCTime
     } deriving (Eq, Ord, Read, Show, Typeable, FormatTime)
 
-instance ToJSON DotNetTime where
+instance ToJSON r DotNetTime where
     toJSON (DotNetTime t) =
         String (pack (secs ++ msecs ++ ")/"))
       where secs  = formatTime defaultTimeLocale "/Date(%s" t
             msecs = take 3 $ formatTime defaultTimeLocale "%q" t
     {-# INLINE toJSON #-}
 
-instance FromJSON DotNetTime where
+instance FromJSON r DotNetTime where
     parseJSON (String t) =
         case parseTime defaultTimeLocale "/Date(%s%Q)/" (unpack t') of
           Just d -> pure (DotNetTime d)
@@ -604,12 +602,12 @@ instance FromJSON DotNetTime where
     parseJSON v   = typeMismatch "DotNetTime" v
     {-# INLINE parseJSON #-}
 
-instance ToJSON UTCTime where
+instance ToJSON r UTCTime where
     toJSON t = String (pack (take 23 str ++ "Z"))
       where str = formatTime defaultTimeLocale "%FT%T%Q" t
     {-# INLINE toJSON #-}
 
-instance FromJSON UTCTime where
+instance FromJSON r UTCTime where
     parseJSON (String t) =
         case parseTime defaultTimeLocale "%FT%T%QZ" (unpack t) of
           Just d -> pure d
@@ -617,7 +615,7 @@ instance FromJSON UTCTime where
     parseJSON v   = typeMismatch "UTCTime" v
     {-# INLINE parseJSON #-}
 
-instance (ToJSON a, ToJSON b) => ToJSON (a,b) where
+instance (ToJSON r a, ToJSON r b) => ToJSON r (a,b) where
     toJSON (a,b) = Array $ V.create $ do
                      mv <- VM.unsafeNew 2
                      VM.unsafeWrite mv 0 (toJSON a)
@@ -625,7 +623,7 @@ instance (ToJSON a, ToJSON b) => ToJSON (a,b) where
                      return mv
     {-# INLINE toJSON #-}
 
-instance (FromJSON a, FromJSON b) => FromJSON (a,b) where
+instance (FromJSON r a, FromJSON r b) => FromJSON r (a,b) where
     parseJSON (Array ab)
         | n == 2    = (,) <$> parseJSON (V.unsafeIndex ab 0)
                           <*> parseJSON (V.unsafeIndex ab 1)
@@ -636,7 +634,7 @@ instance (FromJSON a, FromJSON b) => FromJSON (a,b) where
     parseJSON v = typeMismatch "(a,b)" v
     {-# INLINE parseJSON #-}
 
-instance (ToJSON a, ToJSON b, ToJSON c) => ToJSON (a,b,c) where
+instance (ToJSON r a, ToJSON r b, ToJSON r c) => ToJSON r (a,b,c) where
     toJSON (a,b,c) = Array $ V.create $ do
                        mv <- VM.unsafeNew 3
                        VM.unsafeWrite mv 0 (toJSON a)
@@ -645,7 +643,7 @@ instance (ToJSON a, ToJSON b, ToJSON c) => ToJSON (a,b,c) where
                        return mv
     {-# INLINE toJSON #-}
 
-instance (FromJSON a, FromJSON b, FromJSON c) => FromJSON (a,b,c) where
+instance (FromJSON r a, FromJSON r b, FromJSON r c) => FromJSON r (a,b,c) where
     parseJSON (Array abc)
         | n == 3    = (,,) <$> parseJSON (V.unsafeIndex abc 0)
                            <*> parseJSON (V.unsafeIndex abc 1)
@@ -657,7 +655,7 @@ instance (FromJSON a, FromJSON b, FromJSON c) => FromJSON (a,b,c) where
     parseJSON v = typeMismatch "(a,b,c)" v
     {-# INLINE parseJSON #-}
 
-instance (ToJSON a, ToJSON b, ToJSON c, ToJSON d) => ToJSON (a,b,c,d) where
+instance (ToJSON r a, ToJSON r b, ToJSON r c, ToJSON r d) => ToJSON r (a,b,c,d) where
     toJSON (a,b,c,d) = Array $ V.create $ do
                          mv <- VM.unsafeNew 4
                          VM.unsafeWrite mv 0 (toJSON a)
@@ -667,7 +665,7 @@ instance (ToJSON a, ToJSON b, ToJSON c, ToJSON d) => ToJSON (a,b,c,d) where
                          return mv
     {-# INLINE toJSON #-}
 
-instance (FromJSON a, FromJSON b, FromJSON c, FromJSON d) => FromJSON (a,b,c,d) where
+instance (FromJSON r a, FromJSON r b, FromJSON r c, FromJSON r d) => FromJSON r (a,b,c,d) where
     parseJSON (Array abcd)
         | n == 4    = (,,,) <$> parseJSON (V.unsafeIndex abcd 0)
                             <*> parseJSON (V.unsafeIndex abcd 1)
@@ -680,37 +678,37 @@ instance (FromJSON a, FromJSON b, FromJSON c, FromJSON d) => FromJSON (a,b,c,d) 
     parseJSON v = typeMismatch "(a,b,c,d)" v
     {-# INLINE parseJSON #-}
 
-instance ToJSON a => ToJSON (Dual a) where
+instance ToJSON r a => ToJSON r (Dual a) where
     toJSON = toJSON . getDual
     {-# INLINE toJSON #-}
 
-instance FromJSON a => FromJSON (Dual a) where
+instance FromJSON r a => FromJSON r (Dual a) where
     parseJSON = fmap Dual . parseJSON
     {-# INLINE parseJSON #-}
 
-instance ToJSON a => ToJSON (First a) where
+instance ToJSON r a => ToJSON r (First a) where
     toJSON = toJSON . getFirst
     {-# INLINE toJSON #-}
 
-instance FromJSON a => FromJSON (First a) where
+instance FromJSON r a => FromJSON r (First a) where
     parseJSON = fmap First . parseJSON
     {-# INLINE parseJSON #-}
 
-instance ToJSON a => ToJSON (Last a) where
+instance ToJSON r a => ToJSON r (Last a) where
     toJSON = toJSON . getLast
     {-# INLINE toJSON #-}
 
-instance FromJSON a => FromJSON (Last a) where
+instance FromJSON r a => FromJSON r (Last a) where
     parseJSON = fmap Last . parseJSON
     {-# INLINE parseJSON #-}
 
 -- | Construct a 'Pair' from a key and a value.
-(.=) :: ToJSON a => Text -> a -> Pair
+(.=) :: ToJSON r a => Text -> a -> Pair r
 name .= value = (name, toJSON value)
 {-# INLINE (.=) #-}
 
 -- | Convert a value from JSON, failing if the types do not match.
-fromJSON :: (FromJSON a) => Value -> Result a
+fromJSON :: (FromJSON r a, HasResolution r) => Value r -> Result a
 fromJSON = parse parseJSON
 {-# INLINE fromJSON #-}
 
@@ -721,7 +719,7 @@ fromJSON = parse parseJSON
 -- This accessor is appropriate if the key and value /must/ be present
 -- in an object for it to be valid.  If the key and value are
 -- optional, use '(.:?)' instead.
-(.:) :: (FromJSON a) => Object -> Text -> Parser a
+(.:) :: (FromJSON r a, HasResolution r) => Object r -> Text -> Parser a
 obj .: key = case H.lookup key obj of
                Nothing -> fail $ "key " ++ show key ++ " not present"
                Just v  -> parseJSON v
@@ -734,7 +732,7 @@ obj .: key = case H.lookup key obj of
 -- This accessor is most useful if the key and value can be absent
 -- from an object without affecting its validity.  If the key and
 -- value are mandatory, use '(.:)' instead.
-(.:?) :: (FromJSON a) => Object -> Text -> Parser (Maybe a)
+(.:?) :: (FromJSON r a, HasResolution r) => Object r -> Text -> Parser (Maybe a)
 obj .:? key = case H.lookup key obj of
                Nothing -> pure Nothing
                Just v  -> parseJSON v
@@ -760,7 +758,7 @@ pmval .!= val = fromMaybe val <$> pmval
 
 -- | Fail parsing due to a type mismatch, with a descriptive message.
 typeMismatch :: String -- ^ The name of the type you are trying to parse.
-             -> Value  -- ^ The actual value encountered.
+             -> Value b -- ^ The actual value encountered.
              -> Parser a
 typeMismatch expected actual =
     fail $ "when expecting a " ++ expected ++ ", encountered " ++ name ++

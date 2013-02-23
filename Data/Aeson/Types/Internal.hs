@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, DeriveDataTypeable, Rank2Types, FlexibleInstances, TypeSynonymInstances #-}
+{-# LANGUAGE CPP, DeriveDataTypeable, Rank2Types #-}
 
 -- |
 -- Module:      Data.Aeson.Types.Internal
@@ -33,10 +33,9 @@ module Data.Aeson.Types.Internal
 import Control.Applicative
 import Control.DeepSeq (NFData(..))
 import Control.Monad.State.Strict
-import Data.Decimal
+import Data.Fixed
 import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
-import Data.List (foldl')
 import Data.Monoid (Monoid(..))
 import Data.String (IsString(..))
 import Data.Text (Text, pack)
@@ -44,6 +43,10 @@ import Data.Typeable (Typeable)
 import Data.Vector (Vector)
 import qualified Data.HashMap.Strict as H
 import qualified Data.Vector as V
+import Unsafe.Coerce
+
+instance Hashable (Fixed a) where
+    hash f = hash (unsafeCoerce f :: Integer)
 
 -- | The result of running a 'Parser'.
 data Result a = Error String
@@ -151,21 +154,21 @@ apP d e = do
 {-# INLINE apP #-}
 
 -- | A JSON \"object\" (key\/value map).
-type Object = HashMap Text Value
+type Object a = HashMap Text (Value a)
 
 -- | A JSON \"array\" (sequence).
-type Array = Vector Value
+type Array a = Vector (Value a)
 
 -- | A JSON value represented as a Haskell value.
-data Value = Object !Object
-           | Array !Array
-           | String !Text
-           | Number !Decimal
-           | Bool !Bool
-           | Null
-             deriving (Eq, Show, Typeable)
+data Value a = Object !(Object a)
+             | Array !(Array a)
+             | String !Text
+             | Number !(Fixed a)
+             | Bool !Bool
+             | Null
+               deriving (Eq, Show, Typeable)
 
-instance NFData Value where
+instance NFData (Value a) where
     rnf (Object o) = rnf o
     rnf (Array a)  = V.foldl' (\x y -> rnf y `seq` x) () a
     rnf (String s) = rnf s
@@ -173,30 +176,30 @@ instance NFData Value where
     rnf (Bool b)   = rnf b
     rnf Null       = ()
 
-instance IsString Value where
+instance IsString (Value a) where
     fromString = String . pack
     {-# INLINE fromString #-}
 
-instance Hashable Value where
+instance Hashable (Value a) where
     hash (Object o) = H.foldl' hashWithSalt 0 o
     hash (Array a)  = V.foldl' hashWithSalt 1 a
     hash (String s) = 2 `hashWithSalt` s
-    hash (Number (Decimal e n)) = foldl' hashWithSalt 3 [fromIntegral e, n]
+    hash (Number n) = 3 `hashWithSalt` n
     hash (Bool b)   = 4 `hashWithSalt` b
     hash Null       = 5
 
 -- | The empty array.
-emptyArray :: Value
+emptyArray :: Value a
 emptyArray = Array V.empty
 
 -- | Determines if the 'Value' is an empty 'Array'.
 -- Note that: @isEmptyArray 'emptyArray'@.
-isEmptyArray :: Value -> Bool
+isEmptyArray :: Value a -> Bool
 isEmptyArray (Array arr) = V.null arr
 isEmptyArray _ = False
 
 -- | The empty object.
-emptyObject :: Value
+emptyObject :: Value a
 emptyObject = Object H.empty
 
 -- | Run a 'Parser'.
@@ -214,11 +217,11 @@ parseEither :: (a -> Parser b) -> a -> Either String b
 parseEither m v = runParser (m v) Left Right
 
 -- | A key\/value pair for an 'Object'.
-type Pair = (Text, Value)
+type Pair a = (Text, Value a)
 
 {-# INLINE parseEither #-}
 -- | Create a 'Value' from a list of name\/value 'Pair's.  If duplicate
 -- keys arise, earlier keys and their associated values win.
-object :: [Pair] -> Value
+object :: [Pair a] -> Value a
 object = Object . H.fromList
 {-# INLINE object #-}

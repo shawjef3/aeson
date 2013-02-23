@@ -39,6 +39,7 @@ module Data.Aeson
     , json'
     ) where
 
+import Data.Fixed
 import Data.Aeson.Encode (encode)
 import Data.Aeson.Parser.Internal (decodeWith, json, json')
 import Data.Aeson.Types
@@ -50,7 +51,7 @@ import qualified Data.ByteString.Lazy as L
 --
 -- This function parses immediately, but defers conversion.  See
 -- 'json' for details.
-decode :: (FromJSON a) => L.ByteString -> Maybe a
+decode :: (HasResolution r, FromJSON r a) => L.ByteString -> Maybe a
 decode = decodeWith json fromJSON
 {-# INLINE decode #-}
 
@@ -60,6 +61,6 @@ decode = decodeWith json fromJSON
 --
 -- This function parses and performs conversion immediately.  See
 -- 'json'' for details.
-decode' :: (FromJSON a) => L.ByteString -> Maybe a
+decode' :: (HasResolution r, FromJSON r a) => L.ByteString -> Maybe a
 decode' = decodeWith json' fromJSON
 {-# INLINE decode' #-}

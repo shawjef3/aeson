@@ -1,12 +1,13 @@
-name:            aeson-decimal
+name:            aeson-fixed
 version:         0.6.0.2
 license:         BSD3
 license-file:    LICENSE
 category:        Text, Web, JSON
-copyright:       (c) 2011 Bryan O'Sullivan
+copyright:       (c) 2012 Jeff Shaw
+                 (c) 2011 Bryan O'Sullivan
                  (c) 2011 MailRank, Inc.
 author:          Bryan O'Sullivan <bos@serpentine.com>
-maintainer:      Bryan O'Sullivan <bos@serpentine.com>
+maintainer:      Jeff Shaw <shawjef3@gmail.com>
 stability:       experimental
 tested-with:     GHC == 6.12.3, GHC == 7.0.4, GHC == 7.2.2
 synopsis:        Fast JSON parsing and encoding
@@ -98,34 +99,35 @@ flag developer
   default: False
 
 library
-  extensions: TypeSynonymInstances
   exposed-modules:
-    Data.Aeson
-    Data.Aeson.Encode
-    Data.Aeson.Generic
-    Data.Aeson.Parser
-    Data.Aeson.Types
-    Data.Aeson.TH
+    Data.Aeson.Fixed
+    Data.Aeson.Fixed.Encode
+    Data.Aeson.Fixed.Generic
+    Data.Aeson.Fixed.Parser
+    Data.Aeson.Fixed.Types
+    Data.Aeson.Fixed.TH
 
   other-modules:
-    Data.Aeson.Functions
-    Data.Aeson.Parser.Internal
-    Data.Aeson.Types.Class
-    Data.Aeson.Types.Internal
+    Data.Aeson.Fixed.Functions
+    Data.Aeson.Fixed.Parser.Internal
+    Data.Aeson.Fixed.Types.Class
+    Data.Aeson.Fixed.Types.Internal
+
+  extensions:
+    MultiParamTypeClasses, FunctionalDependencies
 
   if impl(ghc >= 7.2.1)
     cpp-options: -DGENERICS
     build-depends: ghc-prim >= 0.2, dlist >= 0.2
     other-modules:
-      Data.Aeson.Types.Generic
+      Data.Aeson.Fixed.Types.Generic
 
   build-depends:
-    attoparsec-decimal >= 0.8.6.1,
+    attoparsec >= 0.8.6.1,
     base == 4.*,
     blaze-builder >= 0.2.1.4,
     bytestring,
     containers,
-    Decimal == 0.2.3,
     deepseq,
     hashable >= 1.1.2.0,
     mtl,
@@ -154,7 +156,7 @@ test-suite tests
   build-depends:
     QuickCheck,
     aeson,
-    attoparsec-decimal,
+    attoparsec,
     base,
     containers,
     bytestring,

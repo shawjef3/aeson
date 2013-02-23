@@ -1,7 +1,8 @@
-{-# LANGUAGE BangPatterns, OverloadedStrings #-}
+{-# LANGUAGE BangPatterns, OverloadedStrings, FlexibleContexts #-}
 
 import Control.Exception
 import Control.Monad
+import Data.Fixed
 import Data.Aeson
 import Data.Attoparsec
 import Data.Time.Clock
@@ -33,7 +34,7 @@ main = do
             | n >= count = return ()
             | otherwise = {-# SCC "loop" #-} do
           case result of
-            Done _ r -> rnf (encode r) `seq` loop (n+1) r
+            Done _ r -> rnf ((encode :: ToJSON E9 a => a -> L.ByteString) r) `seq` loop (n+1) r
             _        -> error $ "failed to read " ++ show arg
     loop 0 r
     delta <- flip diffUTCTime start `fmap` getCurrentTime

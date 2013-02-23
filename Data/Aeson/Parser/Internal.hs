@@ -29,8 +29,9 @@ import Blaze.ByteString.Builder (fromByteString, toByteString)
 import Blaze.ByteString.Builder.Char.Utf8 (fromChar)
 import Blaze.ByteString.Builder.Word (fromWord8)
 import Control.Applicative as A
+import Data.Fixed
 import Data.Aeson.Types (Result(..), Value(..))
-import Data.Attoparsec.Char8 hiding (Result, decimal)
+import Data.Attoparsec.Char8 hiding (Result, Number (..))
 import Data.Bits ((.|.), shiftL)
 import Data.ByteString as B
 import Data.Char (chr)
@@ -54,7 +55,7 @@ import qualified Data.HashMap.Strict as H
 -- until the Haskell value is needed.  This may improve performance if
 -- only a subset of the results of conversions are needed, but at a
 -- cost in thunk allocation.
-json :: Parser Value
+json :: (HasResolution r) => Parser (Value r)
 json = json_ object_ array_
 
 -- | Parse a top-level JSON value.  This must be either an object or
@@ -63,10 +64,10 @@ json = json_ object_ array_
 -- This is a strict version of 'json' which avoids building up thunks
 -- during parsing; it performs all conversions immediately.  Prefer
 -- this version if most of the JSON data needs to be accessed.
-json' :: Parser Value
+json' :: (HasResolution r) => Parser (Value r)
 json' = json_ object_' array_'
 
-json_ :: Parser Value -> Parser Value -> Parser Value
+json_ :: Parser (Value r) -> Parser (Value r) -> Parser (Value r)
 json_ obj ary = do
   w <- skipSpace *> A.satisfy (\w -> w == 123 || w == 91)
   if w == 123
@@ -74,10 +75,10 @@ json_ obj ary = do
     else ary
 {-# INLINE json_ #-}
 
-object_ :: Parser Value
+object_ :: (HasResolution r) => Parser (Value r)
 object_ = {-# SCC "object_" #-} Object <$> objectValues jstring value
 
-object_' :: Parser Value
+object_' :: (HasResolution r) => Parser (Value r)
 object_' = {-# SCC "object_'" #-} do
   !vals <- objectValues jstring' value'
   return (Object vals)
@@ -86,7 +87,7 @@ object_' = {-# SCC "object_'" #-} do
     !s <- jstring
     return s
 
-objectValues :: Parser Text -> Parser Value -> Parser (H.HashMap Text Value)
+objectValues :: Parser Text -> Parser (Value r) -> Parser (H.HashMap Text (Value r))
 objectValues str val = do
   skipSpace
   let pair = do
@@ -97,15 +98,15 @@ objectValues str val = do
   return (H.fromList vals)
 {-# INLINE objectValues #-}
 
-array_ :: Parser Value
+array_ :: (HasResolution r) => Parser (Value r)
 array_ = {-# SCC "array_" #-} Array <$> arrayValues value
 
-array_' :: Parser Value
+array_' :: (HasResolution r) => Parser (Value r)
 array_' = {-# SCC "array_'" #-} do
   !vals <- arrayValues value'
   return (Array vals)
 
-arrayValues :: Parser Value -> Parser (Vector Value)
+arrayValues :: Parser (Value r) -> Parser (Vector (Value r))
 arrayValues val = do
   skipSpace
   vals <- ((val <* skipSpace) `sepBy` (char ',' *> skipSpace)) <* char ']'
@@ -122,8 +123,8 @@ arrayValues val = do
 -- unless the encoded data represents an object or an array.  JSON
 -- implementations in other languages conform to that same restriction
 -- to preserve interoperability and security.
-value :: Parser Value
-value = most <|> (Number <$> dataDecimal)
+value :: (HasResolution r) => Parser (Value r)
+value = most <|> (Number <$> rational)
  where
   most = do
     c <- satisfy (`B8.elem` "{[\"ftn")
@@ -137,7 +138,7 @@ value = most <|> (Number <$> dataDecimal)
       _   -> error "attoparsec panic! the impossible happened!"
 
 -- | Strict version of 'value'. See also 'json''.
-value' :: Parser Value
+value' :: (HasResolution r) => Parser (Value r)
 value' = most <|> num
  where
   most = do
@@ -153,7 +154,7 @@ value' = most <|> num
       'n' -> string "ull" *> pure Null
       _   -> error "attoparsec panic! the impossible happened!"
   num = do
-    !n <- dataDecimal
+    !n <- rational
     return (Number n)
 
 doubleQuote, backslash :: Word8
@@ -229,7 +230,7 @@ hexQuad = do
     then return $! d .|. (c `shiftL` 4) .|. (b `shiftL` 8) .|. (a `shiftL` 12)
     else fail "invalid hex escape"
 
-decodeWith :: Parser Value -> (Value -> Result a) -> L.ByteString -> Maybe a
+decodeWith :: Parser (Value r) -> ((Value r) -> Result a) -> L.ByteString -> Maybe a
 decodeWith p to s =
     case L.parse p s of
       L.Done _ v -> case to v of

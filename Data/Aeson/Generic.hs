@@ -18,20 +18,20 @@
 module Data.Aeson.Generic
     (
     -- * Decoding and encoding
-      decode
-    , decode'
-    , encode
+--      decode
+--    , decode'
+--    , encode
     -- * Lower-level conversion functions
-    , fromJSON
+     fromJSON
     , toJSON
     ) where
 
 import Control.Applicative ((<$>))
 import Control.Arrow (first)
 import Control.Monad.State.Strict
+import Data.Fixed
 import Data.Aeson.Functions hiding (decode)
 import Data.Aeson.Types hiding (FromJSON(..), ToJSON(..), fromJSON)
-import Data.Decimal
 import Data.Generics
 import Data.Hashable (Hashable)
 import Data.Int (Int8, Int16, Int32, Int64)
@@ -54,7 +54,7 @@ import qualified Data.Text as DT
 import qualified Data.Text.Lazy as LT
 import qualified Data.Traversable as T
 import qualified Data.Vector as V
-
+{-
 -- | Efficiently serialize a JSON value as a lazy 'L.ByteString'.
 encode :: (Data a) => a -> L.ByteString
 encode = E.encode . toJSON
@@ -79,10 +79,10 @@ decode = decodeWith json fromJSON
 decode' :: (Data a) => L.ByteString -> Maybe a
 decode' = decodeWith json' fromJSON
 {-# INLINE decode' #-}
+-}
+type T r a = a -> Value r
 
-type T a = a -> Value
-
-toJSON :: (Data a) => a -> Value
+toJSON :: (Data a, HasResolution r, Typeable r) => a -> Value r
 toJSON = toJSON_generic
          `ext1Q` list
          `ext1Q` vector
@@ -90,34 +90,33 @@ toJSON = toJSON_generic
          `ext2Q'` mapAny
          `ext2Q'` hashMapAny
          -- Use the standard encoding for all base types.
-         `extQ` (T.toJSON :: T Integer)
-         `extQ` (T.toJSON :: T Int)
-         `extQ` (T.toJSON :: T Int8)
-         `extQ` (T.toJSON :: T Int16)
-         `extQ` (T.toJSON :: T Int32)
-         `extQ` (T.toJSON :: T Int64)
-         `extQ` (T.toJSON :: T Word)
-         `extQ` (T.toJSON :: T Word8)
-         `extQ` (T.toJSON :: T Word16)
-         `extQ` (T.toJSON :: T Word32)
-         `extQ` (T.toJSON :: T Word64)
-         `extQ` (T.toJSON :: T Decimal)
---         `extQ` (T.toJSON :: T Double)
---         `extQ` (T.toJSON :: T Float)
---         `extQ` (T.toJSON :: T Rational)
-         `extQ` (T.toJSON :: T Char)
-         `extQ` (T.toJSON :: T Text)
-         `extQ` (T.toJSON :: T LT.Text)
-         `extQ` (T.toJSON :: T String)
-         `extQ` (T.toJSON :: T B.ByteString)
-         `extQ` (T.toJSON :: T L.ByteString)
-         `extQ` (T.toJSON :: T T.Value)
-         `extQ` (T.toJSON :: T DotNetTime)
-         `extQ` (T.toJSON :: T UTCTime)
-         `extQ` (T.toJSON :: T IntSet)
-         `extQ` (T.toJSON :: T Bool)
-         `extQ` (T.toJSON :: T ())
-         --`extQ` (T.toJSON :: T Ordering)
+         `extQ` (T.toJSON :: HasResolution r => T r Integer)
+         `extQ` (T.toJSON :: HasResolution r => T r Int)
+         `extQ` (T.toJSON :: HasResolution r => T r Int8)
+         `extQ` (T.toJSON :: HasResolution r => T r Int16)
+         `extQ` (T.toJSON :: HasResolution r => T r Int32)
+         `extQ` (T.toJSON :: HasResolution r => T r Int64)
+         `extQ` (T.toJSON :: HasResolution r => T r Word)
+         `extQ` (T.toJSON :: HasResolution r => T r Word8)
+         `extQ` (T.toJSON :: HasResolution r => T r Word16)
+         `extQ` (T.toJSON :: HasResolution r => T r Word32)
+         `extQ` (T.toJSON :: HasResolution r => T r Word64)
+         `extQ` (T.toJSON :: HasResolution r => T r Double)
+         `extQ` (T.toJSON :: HasResolution r => T r Float)
+         `extQ` (T.toJSON :: HasResolution r => T r Rational)
+         `extQ` (T.toJSON :: HasResolution r => T r Char)
+         `extQ` (T.toJSON :: HasResolution r => T r Text)
+         `extQ` (T.toJSON :: HasResolution r => T r LT.Text)
+         `extQ` (T.toJSON :: HasResolution r => T r String)
+         `extQ` (T.toJSON :: HasResolution r => T r B.ByteString)
+         `extQ` (T.toJSON :: HasResolution r => T r L.ByteString)
+         `extQ` (T.toJSON :: HasResolution r => T r (T.Value r))
+         `extQ` (T.toJSON :: HasResolution r => T r DotNetTime)
+         `extQ` (T.toJSON :: HasResolution r => T r UTCTime)
+         `extQ` (T.toJSON :: HasResolution r => T r IntSet)
+         `extQ` (T.toJSON :: HasResolution r => T r Bool)
+         `extQ` (T.toJSON :: HasResolution r => T r ())
+         --`extQ` (T.toJSON :: HasResolution r => T r Ordering)
   where
     list xs = Array . V.fromList . map toJSON $ xs
     vector v = Array . V.map toJSON $ v
@@ -145,7 +144,7 @@ toJSON = toJSON_generic
       where tyrep = typeOf . head . H.keys $ m
             remap f = Object . mapKeyVal (f . fromJust . cast) toJSON $ m
 
-toJSON_generic :: (Data a) => a -> Value
+toJSON_generic :: (HasResolution r, Typeable r, Data a) => a -> Value r
 toJSON_generic = generic
   where
         -- Generic encoding of an algebraic data type.
@@ -180,48 +179,47 @@ toJSON_generic = generic
         encodeArgs' ns js  = object $ zip (map pack ns) js
 
 
-fromJSON :: (Data a) => Value -> Result a
+fromJSON :: (HasResolution r, Data a) => Value r -> Result a
 fromJSON = parse parseJSON
 
 type F a = Parser a
 
-parseJSON :: (Data a) => Value -> Parser a
+parseJSON :: (HasResolution r, Data a) => Value r -> Parser a
 parseJSON j = parseJSON_generic j
              `ext1R` list
              `ext1R` vector
              `ext2R'` mapAny
              `ext2R'` hashMapAny
              -- Use the standard encoding for all base types.
-             `extR` (value :: F Integer)
-             `extR` (value :: F Int)
-             `extR` (value :: F Int8)
-             `extR` (value :: F Int16)
-             `extR` (value :: F Int32)
-             `extR` (value :: F Int64)
-             `extR` (value :: F Word)
-             `extR` (value :: F Word8)
-             `extR` (value :: F Word16)
-             `extR` (value :: F Word32)
-             `extR` (value :: F Word64)
-             `extR` (value :: F Decimal)
---             `extR` (value :: F Double)
---             `extR` (value :: F Float)
---             `extR` (value :: F Rational)
-             `extR` (value :: F Char)
-             `extR` (value :: F Text)
-             `extR` (value :: F LT.Text)
-             `extR` (value :: F String)
-             `extR` (value :: F B.ByteString)
-             `extR` (value :: F L.ByteString)
-             `extR` (value :: F T.Value)
-             `extR` (value :: F DotNetTime)
-             `extR` (value :: F UTCTime)
-             `extR` (value :: F IntSet)
-             `extR` (value :: F Bool)
-             `extR` (value :: F ())
+             `extR` (T.parseJSON j :: F Integer)
+             `extR` (T.parseJSON j :: F Int)
+             `extR` (T.parseJSON j :: F Int8)
+             `extR` (T.parseJSON j :: F Int16)
+             `extR` (T.parseJSON j :: F Int32)
+             `extR` (T.parseJSON j :: F Int64)
+             `extR` (T.parseJSON j :: F Word)
+             `extR` (T.parseJSON j :: F Word8)
+             `extR` (T.parseJSON j :: F Word16)
+             `extR` (T.parseJSON j :: F Word32)
+             `extR` (T.parseJSON j :: F Word64)
+             `extR` (T.parseJSON j :: F Double)
+             `extR` (T.parseJSON j :: F Float)
+             `extR` (T.parseJSON j :: F Rational)
+             `extR` (T.parseJSON j :: F Char)
+             `extR` (T.parseJSON j :: F Text)
+             `extR` (T.parseJSON j :: F LT.Text)
+             `extR` (T.parseJSON j :: F String)
+             `extR` (T.parseJSON j :: F B.ByteString)
+             `extR` (T.parseJSON j :: F L.ByteString)
+             --`extR` (T.parseJSON j :: HasResolution r => F (T.Value r))
+             `extR` (T.parseJSON j :: F DotNetTime)
+             `extR` (T.parseJSON j :: F UTCTime)
+             `extR` (T.parseJSON j :: F IntSet)
+             `extR` (T.parseJSON j :: F Bool)
+             `extR` (T.parseJSON j :: F ())
   where
-    value :: (T.FromJSON a) => Parser a
-    value = T.parseJSON j
+    --value :: (T.FromJSON r a) => Parser a
+    --value = T.parseJSON j
     list :: (Data a) => Parser [a]
     list = V.toList <$> parseJSON j
     vector :: (Data a) => Parser (V.Vector a)
@@ -264,7 +262,7 @@ parseJSON j = parseJSON_generic j
 
     myFail = modFail "parseJSON" $ "bad data: " ++ show j
 
-parseJSON_generic :: (Data a) => Value -> Parser a
+parseJSON_generic :: (HasResolution r, Data a) => Value r -> Parser a
 parseJSON_generic j = generic
   where
         typ = dataTypeOf $ resType generic
@@ -303,7 +301,7 @@ parseJSON_generic j = generic
 
         -- Build the value by stepping through the list of subparts.
         construct c = evalStateT $ fromConstrM f c
-          where f :: (Data a) => StateT [Value] Parser a
+          where f :: (HasResolution r, Data a) => StateT [Value r] Parser a
                 f = do js <- get
                        case js of
                          [] -> lift $ modFail "construct" "empty list"

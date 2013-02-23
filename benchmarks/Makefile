@@ -1,5 +1,5 @@
 ghc := ghc
-ghcflags := -O
+ghcflags := -O -hide-package aeson
 
 binaries := AesonParse AesonEncode JsonParse AesonCompareAutoInstances
 

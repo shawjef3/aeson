@@ -678,7 +678,7 @@ parseTypeMismatch tName conName expected actual =
           , actual
           ]
 
-lookupField :: (FromJSON a) => String -> String -> Object -> T.Text -> Parser a
+lookupField :: (FromJSON r a) => String -> String -> Object r -> T.Text -> Parser a
 lookupField tName rec obj key =
     case H.lookup key obj of
       Nothing -> unknownFieldFail tName rec (T.unpack key)
@@ -759,7 +759,7 @@ fieldNameExp :: (String -> String) -- ^ Function to change the field name.
 fieldNameExp f = litE . stringL . f . nameBase
 
 -- | The name of the outermost 'Value' constructor.
-valueConName :: Value -> String
+valueConName :: Value r ->  String
 valueConName (Object _) = "Object"
 valueConName (Array  _) = "Array"
 valueConName (String _) = "String"

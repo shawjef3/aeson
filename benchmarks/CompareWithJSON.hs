@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
+import Data.Fixed
 import Blaze.ByteString.Builder (toLazyByteString)
 import Blaze.ByteString.Builder.Char.Utf8 (fromString)
 import Control.DeepSeq (NFData(rnf))
@@ -30,7 +31,7 @@ decodeJ s =
     J.Ok v -> v
     J.Error _ -> error "fail to parse via JSON"
 
-decodeA :: BL.ByteString -> A.Value
+decodeA :: BL.ByteString -> A.Value E9
 decodeA s = case A.decode s of
               Just v -> v
               Nothing -> error "fail to parse via Aeson"
